@@ -1,0 +1,108 @@
+!
+version 15.1
+no service timestamps log datetime msec
+no service timestamps debug datetime msec
+no service password-encryption
+!
+hostname R1
+!
+!
+!
+!
+!
+!
+no ip cef
+no ipv6 cef
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+no ip domain-lookup
+!
+!
+spanning-tree mode pvst
+!
+!
+!
+!
+!
+!
+interface GigabitEthernet0/0
+ description Subred A 192.168.10.0/25
+ ip address 192.168.10.1 255.255.255.128
+ ip access-group SUBRED-A in
+ duplex auto
+ speed auto
+!
+interface GigabitEthernet0/1
+ description Subred B 192.168.10.128/27
+ ip address 192.168.10.129 255.255.255.224
+ ip access-group SUBRED-B in
+ duplex auto
+ speed auto
+!
+interface GigabitEthernet0/2
+ description Subred C 192.168.10.160/29
+ ip address 192.168.10.161 255.255.255.248
+ ip access-group SUBRED-C in
+ duplex auto
+ speed auto
+!
+interface Serial0/0/0
+ description Enlace con R-CENTRAL (10.0.0.0/30)
+ ip address 10.0.0.2 255.255.255.252
+ ip access-group ENTRADA-RED1 in
+!
+interface Serial0/0/1
+ no ip address
+ clock rate 2000000
+ shutdown
+!
+interface Vlan1
+ no ip address
+ shutdown
+!
+ip classless
+ip route 0.0.0.0 0.0.0.0 10.0.0.1
+!
+ip flow-export version 9
+!
+!
+ip access-list extended SUBRED-A
+ permit ip 192.168.10.0 0.0.0.127 192.168.10.0 0.0.0.127
+ deny ip any any
+ip access-list extended SUBRED-B
+ permit ip 192.168.10.128 0.0.0.31 192.168.10.128 0.0.0.31
+ deny ip any any
+ip access-list extended SUBRED-C
+ permit ip 192.168.10.160 0.0.0.7 192.168.10.160 0.0.0.7
+ deny ip any any
+ip access-list extended ENTRADA-RED1
+ deny ip any 192.168.10.0 0.0.0.255
+ permit ip any any
+!
+banner motd ^CR1 - Red 1 (subredes VLSM)^C
+!
+!
+!
+!
+!
+line con 0
+!
+line aux 0
+!
+line vty 0 4
+ login
+!
+!
+!
+end
