@@ -203,6 +203,10 @@ ip route 0.0.0.0 0.0.0.0 10.0.0.17
 
 En los enlaces serie, el extremo DCE es el que marca la velocidad con `clock rate`. Los he puesto en R-CENTRAL (`clock rate 64000` en sus cinco interfaces serie). La configuración completa de cada router y de cada switch está en la carpeta [`configuraciones/`](configuraciones/).
 
+En la tabla de rutas de R-CENTRAL se ven las cinco redes /30 de los enlaces serie como conectadas (C), la red de servidores conectada por G0/0 y las cinco rutas estáticas (S) hacia las redes 192.168.10.0, .20.0, .30.0, .40.0 y .50.0 con el siguiente salto de cada router:
+
+![show ip route en R-CENTRAL](imagenes/02_r_central_show_ip_route.png)
+
 ## 8. ACL de la Red 1
 
 El enunciado pide que las tres subredes de la Red 1 no se comuniquen entre sí ni con las otras cuatro redes. Todas las subredes van al mismo router (R1), así que si no se hace nada el router las enruta entre ellas y hacia fuera. Para impedirlo he usado **listas de acceso extendidas con nombre** en R1.
@@ -242,6 +246,10 @@ Y así quedan aplicadas:
 | G0/2 (subred C) | SUBRED-C | in |
 | S0/0/0 (hacia R-CENTRAL) | ENTRADA-RED1 | in |
 
+Con `show access-lists` en R1 se ven las cuatro listas. Las coincidencias (*matches*) que aparecen son de las pruebas del apartado 11: las 8 del `deny` de SUBRED-A son los dos pings de PC1-A1 hacia la Red 2 (4 paquetes cada uno) y las 4 del `deny` de ENTRADA-RED1 son el ping de PC2-1 hacia 192.168.10.10.
+
+![show access-lists en R1](imagenes/03_r1_show_access_lists.png)
+
 He decidido que la Red 1 tampoco pueda llegar a la red de servidores. El enunciado habla de las otras cuatro redes, pero en las pruebas el DNS y la web solo tienen que funcionar desde las "redes autorizadas", y la Red 1 es la que no está autorizada. Si se quisiera dejar pasar a los servidores bastaría con añadir una línea `permit ip <subred> 192.168.100.0 0.0.0.255` antes del `deny` en cada ACL y otra igual al revés en ENTRADA-RED1.
 
 ## 9. Servicios: DHCP, DNS, HTTP y Wi-Fi
@@ -260,6 +268,12 @@ ip dhcp pool RED2
 
 R3 es igual con la red 192.168.30.0 (pool RED3) y R4 con la 192.168.40.0 (pool RED4-WIFI) pero excluyendo de la .1 a la .20. Los PCs de las Redes 2 y 3 y los portátiles de la Red 4 tienen marcada la opción DHCP en IP Configuration.
 
+Al final los ocho PCs de la Red 2 tienen de la 192.168.20.11 a la .18 (en R2 `show ip dhcp binding` saca las ocho asignaciones), los cuatro de la Red 3 de la 192.168.30.11 a la .14 y los cinco portátiles de la 192.168.40.21 a la .25. Todos con su puerta de enlace y con el DNS 192.168.100.10. En las capturas se ve el `ipconfig /renew` de PC2-1 y de PC3-1:
+
+![DHCP en PC2-1 (Red 2)](imagenes/04_dhcp_red2_ipconfig.png)
+
+![DHCP en PC3-1 (Red 3)](imagenes/05_dhcp_red3_ipconfig.png)
+
 ### DNS
 
 El servidor SRV-DNS (192.168.100.10) tiene el servicio DNS activado con tres registros de tipo A, uno por cada web:
@@ -271,6 +285,8 @@ El servidor SRV-DNS (192.168.100.10) tiene el servicio DNS activado con tres reg
 | www.dilar.com | A | 192.168.100.13 |
 
 Todos los equipos de las redes autorizadas tienen 192.168.100.10 como DNS: los de DHCP porque se lo da el router y los de IP fija porque se lo he puesto a mano. En SRV-DNS he desactivado el HTTP para que solo haga de DNS.
+
+![Registros A en SRV-DNS](imagenes/07_dns_registros.png)
 
 ### HTTP
 
@@ -301,44 +317,66 @@ El punto de acceso AP4 está conectado al puerto Fa0/5 de SW4. En *Config > Port
 
 En cada portátil, después de cambiar la tarjeta por la WPC300N, en *Config > Wireless0* he puesto el mismo SSID, WPA2-PSK, la misma clave y DHCP. El AP no tiene IP porque no la necesita para hacer de puente entre el Wi-Fi y el cable.
 
-![Portátil conectado por Wi-Fi](imagenes/09_wifi_laptop_ipconfig.png)
+![Configuración de AP4](imagenes/08_wifi_ap4_config.png)
+
+Los cinco portátiles se conectan a RED4-WIFI y reciben la IP por DHCP (de la 192.168.40.21 a la .25). En la captura está LAP4-1: los *DHCP request failed* del principio son de antes de volver a ponerle el SSID (lo explico en el apartado 12), y después ya tiene la 192.168.40.21 en la interfaz Wireless0.
+
+![LAP4-1 conectado por Wi-Fi](imagenes/09_wifi_laptop_ipconfig.png)
 
 ## 10. Páginas web
 
-Las tres páginas las he abierto desde el navegador de PC2-1 (*Desktop > Web Browser*) escribiendo el nombre de dominio, y las tres se ven con su texto y su foto. Estas son las de Albacete y Wagner; la de Dílar sale igual, con la foto del pueblo:
+Las tres páginas las he abierto desde el navegador de PC2-1 (*Desktop > Web Browser*) escribiendo el nombre de dominio, y las tres se ven con su texto y su foto.
 
 ![www.albacete.es](imagenes/10_web_albacete.png)
 
 ![www.wagner.de](imagenes/11_web_wagner.png)
 
+![www.dilar.com](imagenes/12_web_dilar.png)
+
 ## 11. Pruebas de conectividad y resolución de nombres
 
-Las pruebas las he hecho desde *Desktop > Command Prompt* (`ipconfig`, `ipconfig /renew`, `ping`, `nslookup`) y desde *Desktop > Web Browser*. Estos son los resultados que he obtenido:
+Las pruebas las he hecho desde *Desktop > Command Prompt* (`ipconfig`, `ipconfig /renew`, `ping`, `tracert`, `nslookup`) y desde *Desktop > Web Browser*. He seguido la tabla de pruebas del enunciado:
 
-| Prueba | Desde | Hacia / comando | Resultado |
-|---|---|---|---|
-| DHCP en la Red 2 | PC2-1 | `ipconfig /renew` | Correcto: 192.168.20.11, máscara 255.255.255.0, gateway 192.168.20.1, DNS 192.168.100.10 |
-| Ping entre redes autorizadas | PC2-1 | PC5-1 (192.168.50.11) | Correcto: 3 de 4 respuestas, TTL=125 (el primero da *Request timed out*) |
-| Resolución DNS | PC2-1 | `nslookup www.albacete.es` | Correcto: 192.168.100.11 (la primera petición dio *timed out* y al repetir respondió bien) |
-| HTTP por nombre | PC2-1 | http://www.albacete.es, http://www.wagner.de, http://www.dilar.com | Correcto: se ven las tres páginas con su foto |
-| Ping desde la Red 1 hacia otra red | PC1-A1 | Gateway de la Red 2 (192.168.20.1) | Bloqueado: `Destination host unreachable` contestado por 192.168.10.1, 100 % de pérdida |
-| Conexión Wi-Fi y DHCP del portátil | LAP4-1 | AP4 / `ipconfig` | Correcto: asociado a RED4-WIFI y con 192.168.40.21, gateway 192.168.40.1, DNS 192.168.100.10 |
+| Prueba | Desde | Hacia / comando | Esperado | Resultado | Captura |
+|---|---|---|---|---|---|
+| Ping dentro de una misma red | PC2-1 | PC2-2 (192.168.20.12) | Correcto | Correcto: 4 de 4, TTL=128 | 13 |
+| Ping entre redes autorizadas | PC2-1 | PC5-1 (192.168.50.11) | Correcto | Correcto: 3 de 4, TTL=125 (el primero da *Request timed out*) | 14 |
+| Camino entre redes | PC2-1 | `tracert 192.168.50.11` | | 4 saltos: 192.168.20.1, 10.0.0.5, 10.0.0.18, 192.168.50.11 | 13 |
+| Ping desde la Red 1 hacia otra red | PC1-A1 | 192.168.20.1 (Red 2) | Bloqueado | Bloqueado: *Destination host unreachable* desde 192.168.10.1, 100 % de pérdida | 15 |
+| Ping desde otra red hacia la Red 1 | PC2-1 | PC1-A1 (192.168.10.10) | Bloqueado | Bloqueado: *Destination host unreachable* desde 10.0.0.2, 100 % de pérdida | 16 |
+| DHCP en la Red 2 | PC2-1 a PC2-8 | `ipconfig /renew` | Correcta | Correcta: 192.168.20.11 a .18, /24, gateway 192.168.20.1, DNS 192.168.100.10 | 04 |
+| DHCP en la Red 3 | PC3-1 a PC3-4 | `ipconfig /renew` | Correcta | Correcta: 192.168.30.11 a .14, /24, gateway 192.168.30.1, DNS 192.168.100.10 | 05 |
+| DHCP en los portátiles | LAP4-1 a LAP4-5 | `ipconfig` | Correcta | Correcta: 192.168.40.21 a .25, /24, gateway 192.168.40.1, DNS 192.168.100.10 | 09 |
+| Conexión al punto de acceso | LAP4-1 a LAP4-5 | AP4 (RED4-WIFI) | Correcta | Correcta: los cinco conectados con WPA2-PSK y AES | 08, 09 |
+| Resolución DNS | PC2-1 | `nslookup www.albacete.es` | Correcta | Correcta: 192.168.100.11 (la primera petición dio *timed out* y la segunda respondió) | 17 |
+| HTTP por nombre de dominio | PC2-1 | www.albacete.es, www.wagner.de, www.dilar.com | Correcto | Correcto: se abren las tres páginas con su foto | 10, 11, 12 |
 
 Algunas cosas que se ven en estos resultados:
 
-- El TTL=125 del ping de PC2-1 a PC5-1 cuadra con el camino: el PC5-1 responde con TTL 128 y la respuesta pasa por tres routers (R5, R-CENTRAL y R2), que le restan 1 cada uno.
-- El ping desde la Red 1 lo corta R1 con la ACL de la subred A: por eso la respuesta *Destination host unreachable* viene de 192.168.10.1, que es la interfaz G0/0 de R1, y no de la red de destino.
-- Las páginas se abren escribiendo el nombre de dominio, así que a la vez se está comprobando el DNS y el HTTP.
+- El TTL cuadra con el número de routers. Entre PC2-1 y PC2-2 no hay ningún router y llega con 128. Hasta PC5-1 llega con 125 porque la respuesta pasa por tres routers (R5, R-CENTRAL y R2), que le restan 1 cada uno. Es lo mismo que sale en el `tracert`: el gateway de la Red 2 (R2), la interfaz serie de R-CENTRAL hacia R2 (10.0.0.5), la interfaz serie de R5 (10.0.0.18) y el PC de destino.
+- El ping desde la Red 1 lo corta R1 con la ACL SUBRED-A nada más entrar, por eso el *Destination host unreachable* lo manda 192.168.10.1, que es la G0/0 de R1.
+- En el sentido contrario el paquete llega hasta R1 y lo para la ACL ENTRADA-RED1 en la entrada del enlace serie, por eso esta vez el aviso viene de 10.0.0.2, que es la S0/0/0 de R1.
+- Las páginas se abren escribiendo el nombre de dominio, así que www.wagner.de y www.dilar.com también se están resolviendo por DNS aunque el `nslookup` solo lo hice con www.albacete.es.
 
-El resto de pruebas que pide el enunciado (ping dentro de una misma red, ping entre las subredes de la Red 1, ping desde otras redes hacia la Red 1, DHCP en la Red 3 y en los otros cuatro portátiles) no aparecen en esta tabla porque no tengo captura de ellas.
+En la captura 13 se ve también que el primer ping a PC2-2 no respondió ninguna vez. Lo hice mientras estaba renovando la IP de los PCs de la Red 2 y lo más probable es que PC2-2 todavía no tuviera dirección; al repetirlo respondió 4 de 4.
 
-![Ping entre redes autorizadas](imagenes/14_ping_entre_redes.png)
+Hay pruebas que no he hecho: el ping entre las subredes de la Red 1 (por ejemplo de PC1-A1 a PC1-B1) y desde las subredes B y C hacia fuera, el ping desde la Red 3 hacia otras redes, el ping entre un portátil y un PC de cable de la Red 4, y el DNS y la web desde redes distintas de la Red 2.
+
+![Ping dentro de la Red 2 y tracert](imagenes/13_ping_misma_red.png)
+
+![Ping de la Red 2 a la Red 5](imagenes/14_ping_entre_redes.png)
+
+![Ping desde la Red 1 bloqueado](imagenes/15_ping_red1_bloqueado.png)
+
+![Ping hacia la Red 1 bloqueado](imagenes/16_ping_hacia_red1_bloqueado.png)
+
+![nslookup de www.albacete.es](imagenes/17_nslookup.png)
 
 ## 12. Problemas encontrados y soluciones
 
 **Los portátiles no tenían tarjeta Wi-Fi.** El Laptop-PT viene con una tarjeta de red de cable (PT-LAPTOP-NM-1CFE). En cada uno de los cinco portátiles tuve que ir a *Physical*, apagarlo, sacar esa tarjeta, meter la WPC300N y volver a encenderlo. Hasta que no lo hice no aparecía la interfaz Wireless0.
 
-**Los equipos con DHCP se quedaban sin IP.** Los PCs de las Redes 2 y 3 salían con 0.0.0.0 y los portátiles con una 169.254.x.x. El motivo es que pidieron la IP antes de que los pools DHCP de los routers estuvieran configurados, y como no recibieron respuesta se quedaron así. En los routers estaba todo bien, pero `show ip dhcp binding` salía vacío. Se soluciona pidiendo la IP otra vez con `ipconfig /renew` (o cambiando a *Static* y otra vez a *DHCP* en IP Configuration). Además, al volver a abrir el .pkt el PC2-1 aparecía otra vez sin dirección y tuve que repetir el `ipconfig /renew`, que le dio la 192.168.20.11.
+**Los equipos con DHCP se quedaban sin IP.** Los PCs de las Redes 2 y 3 salían con 0.0.0.0 y los portátiles con una 169.254.x.x. El motivo es que pidieron la IP antes de que los pools DHCP de los routers estuvieran configurados, y como no recibieron respuesta se quedaron así. En los routers el DHCP estaba bien configurado, el problema era solo el momento en que lo pidieron. Se soluciona pidiendo la IP otra vez con `ipconfig /renew` (o cambiando a *Static* y otra vez a *DHCP* en IP Configuration). Además, al volver a abrir el .pkt el PC2-1 aparecía otra vez sin dirección y tuve que repetir el `ipconfig /renew`, que le dio la 192.168.20.11.
 
 **Los portátiles perdieron la configuración inalámbrica.** En LAP4-1 el SSID había vuelto a *Default*, así que no se conectaba al punto de acceso y el `ipconfig /renew` daba *DHCP request failed* varias veces. Volví a poner en *Config > Wireless0* el SSID RED4-WIFI, WPA2-PSK, cifrado AES y la clave, y después de eso se asoció a AP4 y recibió la 192.168.40.21.
 
